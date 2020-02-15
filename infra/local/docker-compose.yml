@@ -1,0 +1,191 @@
+version: "3.7"
+
+volumes:
+  airflow-pgdata:
+  stocks-pgdata:
+
+networks:
+  phi-local:
+
+services:
+  airflow-webserver:
+    image: phidata/airflow:1.10.7
+    command: ["webserver"]
+    volumes:
+      - "./airflow:/usr/local/airflow/dags"
+      # Uncomment to include custom plugins
+      # - ./plugins:/usr/local/airflow/plugins
+    ports:
+      - "9090:8080"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.airflow-webserver.entrypoints=http"
+      - "traefik.http.routers.airflow-webserver.rule=((Host(`localdata`) || Host(`localhost`)) && PathPrefix(`/airflow`))"
+      - "traefik.http.services.airflow-webserver.loadbalancer.server.port=8080"
+    environment:
+      - WAIT_FOR_DB=true
+      - WAIT_FOR_REDIS=true
+      - POSTGRES_SERVICE=airflow-pg
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+      - REDIS_SERVICE=airflow-redis
+      - REDIS_PORT=6379
+      # - REDIS_PASSWORD
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CELERY__BROKER_URL=redis://airflow-redis:6379/1
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__WEBSERVER__BASE_URL=http://localhost/airflow
+      - AIRFLOW_CONN_STOCKS_MASTER=postgres://postgres:postgres@192.168.99.111:5436/stocks_dev
+      - AIRFLOW_CONN_USERS_MASTER=postgres://postgres:postgres@192.168.99.111:5435/users_dev
+    depends_on:
+      - airflow-pg
+      - airflow-redis
+    networks:
+      - phi-local
+
+  airflow-redis:
+    image: redis:3.2.7-alpine
+    ports:
+      - "6400:6379"
+    # command: ["redis-server", "--requirepass", "redispass"]
+    networks:
+      - phi-local
+
+  airflow-pg:
+    image: postgres:11.2-alpine
+    volumes:
+      - "airflow-pgdata:/var/lib/postgresql/data/pgdata:rw"
+    ports:
+      # Airflow DB is now available on port 5450 on the Host Machine and 5432 for services
+      # running in other containers using the service name: airflow-pg
+      - "5450:5432"
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    networks:
+      - phi-local
+
+  airflow-scheduler:
+    image: phidata/airflow:1.10.7
+    command: ["scheduler"]
+    volumes:
+      - "./airflow:/usr/local/airflow/dags"
+    environment:
+      - WAIT_FOR_DB=true
+      - WAIT_FOR_REDIS=true
+      - POSTGRES_SERVICE=airflow-pg
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+      - REDIS_SERVICE=airflow-redis
+      - REDIS_PORT=6379
+      # - REDIS_PASSWORD
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CELERY__BROKER_URL=redis://airflow-redis:6379/1
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__WEBSERVER__BASE_URL=http://localhost/airflow
+      - AIRFLOW_CONN_STOCKS_MASTER=postgres://postgres:postgres@192.168.99.111:5436/stocks_dev
+      - AIRFLOW_CONN_USERS_MASTER=postgres://postgres:postgres@192.168.99.111:5435/users_dev
+    depends_on:
+      - airflow-webserver
+    networks:
+      - phi-local
+
+  airflow-worker:
+    image: phidata/airflow:1.10.7
+    command: ["worker"]
+    volumes:
+      - "./airflow:/usr/local/airflow/dags"
+    environment:
+      - WAIT_FOR_DB=true
+      - WAIT_FOR_REDIS=true
+      - POSTGRES_SERVICE=airflow-pg
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+      - REDIS_SERVICE=airflow-redis
+      - REDIS_PORT=6379
+      # - REDIS_PASSWORD
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CELERY__BROKER_URL=redis://airflow-redis:6379/1
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__WEBSERVER__BASE_URL=http://localhost/airflow
+      - AIRFLOW_CONN_STOCKS_MASTER=postgres://postgres:postgres@192.168.99.111:5436/stocks_dev
+      - AIRFLOW_CONN_USERS_MASTER=postgres://postgres:postgres@192.168.99.111:5435/users_dev
+    depends_on:
+      - airflow-scheduler
+    networks:
+      - phi-local
+
+  airflow-flower:
+    image: phidata/airflow:1.10.7
+    command: ["flower"]
+    ports:
+      - "5600:5555"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.airflow-flower.entrypoints=http"
+      - "traefik.http.routers.airflow-flower.rule=((Host(`localdata`) || Host(`localhost`)) && PathPrefix(`/airflowflower`))"
+      - "traefik.http.services.airflow-flower.loadbalancer.server.port=5555"
+    environment:
+      - WAIT_FOR_REDIS=true
+      - REDIS_SERVICE=airflow-redis
+      - REDIS_PORT=6379
+      # - REDIS_PASSWORD
+      - AIRFLOW__CORE__EXECUTOR=CeleryExecutor
+      - AIRFLOW__CELERY__BROKER_URL=redis://airflow-redis:6379/1
+      - AIRFLOW__CELERY__RESULT_BACKEND=db+postgresql://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__CORE__FERNET_KEY=46BKJoQYlPPOexq0OhDZnIlNepKFf87WFwLbfzqDDho=
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@airflow-pg:5432/airflow
+      - AIRFLOW__WEBSERVER__BASE_URL=http://localhost/airflow
+      - AIRFLOW_CONN_STOCKS_MASTER=postgres://postgres:postgres@192.168.99.111:5436/stocks_dev
+      - AIRFLOW_CONN_USERS_MASTER=postgres://postgres:postgres@192.168.99.111:5435/users_dev
+    depends_on:
+      - airflow-redis
+    networks:
+      - phi-local
+
+  stocks-pg:
+    image: postgres:11.2-alpine
+    volumes:
+      - "stocks-pgdata:/var/lib/postgresql/data/pgdata:rw"
+    ports:
+      # Stocks DB is now available on port 5451 on the Host Machine and 5432 for services
+      # running in other containers using the service name: stocks-pg
+      - "5451:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=stocks
+      - PGDATA=/var/lib/postgresql/data/pgdata
+    networks:
+      - phi-local
+
+  traefik:
+    image: traefik:v2.0.4
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "./traefik.yaml:/etc/traefik/traefik.yaml:ro"
+    ports:
+      - "80:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.middlewares=auth"
+      - "traefik.http.routers.api.rule=Host(`traefik.localdata`)"
+      - "traefik.http.services.api.loadbalancer.server.port=8080"
+      - "traefik.http.middlewares.auth.basicauth.users=test:$$apr1$$H6uskkkW$$IgXLP6ewTrSuBkTrqE8wj/,test2:$$apr1$$d9hr9HBB$$4HxwgUir3HP4EsggP/QNo0"
+    networks:
+      - phi-local

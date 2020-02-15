@@ -1,0 +1,20 @@
+# See https://help.github.com/ignore-files/ for more about ignoring files.
+# TODO: Use https://github.com/github/gitignore/blob/master/Python.gitignore
+
+.venv
+.mypy_cache
+
+.env.local
+.env.prd
+
+env
+htmlcov
+.DS_Store
+__pycache__
+*.egg-info
+*.pyc
+
+cloud_sql_proxy
+
+__pycache__
+
